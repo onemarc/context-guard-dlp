@@ -19,7 +19,14 @@ interface LocalScore {
 const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b/
 const EMAIL_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
 const TOKEN_REGEX = /\b[A-Za-z0-9_\-]{24,}\b/
-const API_KEY_REGEX = /(sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z\-_]{35})/
+const API_KEY_REGEX = /(\bsk-[A-Za-z0-9]{8,}\b|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z\-_]{35}|\bghp_[A-Za-z0-9]{20,}\b|\bxox[baprs]-[A-Za-z0-9-]{10,}\b)/
+const SESSION_KV_REGEX = /\b(?:sessionid|session_id|token|auth(?:orization)?|api[_-]?key|secret)\s*[:=]\s*[A-Za-z0-9_\-]{6,}\b/i
+const PASSPORT_REGEX = /\b[A-Z]{1,2}\d{6,9}\b/
+const FULL_NAME_REGEX = /\b[A-Z][a-z]{1,30}\s+[A-Z][a-z]{1,30}\b/
+const PHONE_CANDIDATE_REGEX = /(?:\+?\d[\d().\-\s]{7,}\d)/g
+const GENDER_REGEX = /\b(male|female|man|woman|non-binary|boy|girl)\b/i
+const BIRTH_YEAR_REGEX = /\b(?:born\s*(?:in)?\s*)?(19[3-9]\d|20[0-1]\d)\b/i
+const SMALL_LOCATION_REGEX = /\b(small town|village|hamlet|rural town|lives in|from)\b/i
 const CARD_CANDIDATE_REGEX = /(?:\d[ -]*?){13,19}/g
 
 export class DecisionEngine {
@@ -170,27 +177,52 @@ function scoreLocal(text: string): LocalScore {
   const validCards = findValidCards(text)
   if (validCards.length > 0) {
     score = Math.max(score, 98)
-    reason = 'Valid payment card detected via Luhn verification'
+    reason = 'This looks like a payment card number'
   }
 
   if (SSN_REGEX.test(text)) {
     score = Math.max(score, 94)
-    reason = 'SSN format detected'
+    reason = 'This looks like a social security number'
+  }
+
+  if (hasLikelyPhoneNumber(text)) {
+    score = Math.max(score, 92)
+    reason = 'This looks like a phone number'
+  }
+
+  if (PASSPORT_REGEX.test(text)) {
+    score = Math.max(score, 92)
+    reason = 'This looks like a passport or ID number'
   }
 
   if (API_KEY_REGEX.test(text)) {
-    score = Math.max(score, 72)
-    reason = 'Possible API key detected, context requires verification'
+    score = Math.max(score, 93)
+    reason = 'This looks like an API key or access secret'
+  }
+
+  if (SESSION_KV_REGEX.test(text)) {
+    score = Math.max(score, 68)
+    reason = 'This may contain a session token or secret value'
   }
 
   if (TOKEN_REGEX.test(text)) {
-    score = Math.max(score, 56)
-    reason = 'High-entropy token-like text detected'
+    score = Math.max(score, 64)
+    reason = 'This may contain a private token'
+  }
+
+  if (FULL_NAME_REGEX.test(text)) {
+    score = Math.max(score, 34)
+    reason = 'This may include a full name and needs a quick check'
+  }
+
+  if (hasQuasiIdentifierCombo(text)) {
+    score = Math.max(score, 58)
+    reason = 'This combination of personal details may identify a person'
   }
 
   if (EMAIL_REGEX.test(text)) {
     score = Math.max(score, 22)
-    reason = 'Contains email-like content'
+    reason = 'This may include an email address'
   }
 
   const maskedText = maskText(text)
@@ -208,6 +240,18 @@ function findValidCards(text: string): string[] {
     .map((candidate) => candidate.replace(/[^\d]/g, ''))
     .filter((digits) => digits.length >= 13 && digits.length <= 19)
     .filter((digits) => luhnValid(digits))
+}
+
+function hasLikelyPhoneNumber(text: string): boolean {
+  const matches = text.match(PHONE_CANDIDATE_REGEX) ?? []
+  return matches.some((candidate) => {
+    const digits = candidate.replace(/\D/g, '')
+    return digits.length >= 9 && digits.length <= 15
+  })
+}
+
+function hasQuasiIdentifierCombo(text: string): boolean {
+  return GENDER_REGEX.test(text) && BIRTH_YEAR_REGEX.test(text) && SMALL_LOCATION_REGEX.test(text)
 }
 
 function luhnValid(number: string): boolean {
@@ -234,7 +278,40 @@ function normalizeText(text: string): string {
 }
 
 function maskText(text: string): string {
-  return text.replace(/[A-Za-z0-9]/g, '*')
+  let masked = text
+
+  masked = masked.replace(EMAIL_REGEX, '[EMAIL]')
+  masked = masked.replace(SSN_REGEX, '[SSN]')
+  masked = masked.replace(API_KEY_REGEX, '[API_KEY]')
+  masked = masked.replace(SESSION_KV_REGEX, (match) => {
+    const divider = match.includes('=') ? '=' : ':'
+    const parts = match.split(divider)
+    if (parts.length < 2) {
+      return '[SECRET]'
+    }
+    return `${parts[0].trim()}${divider}[REDACTED]`
+  })
+
+  masked = masked.replace(TOKEN_REGEX, '[TOKEN]')
+
+  const phoneMatches = masked.match(PHONE_CANDIDATE_REGEX) ?? []
+  for (const phoneMatch of phoneMatches) {
+    const digits = phoneMatch.replace(/\D/g, '')
+    if (digits.length >= 9 && digits.length <= 15) {
+      masked = masked.replace(phoneMatch, '[PHONE]')
+    }
+  }
+
+  const cardMatches = masked.match(CARD_CANDIDATE_REGEX) ?? []
+  for (const cardMatch of cardMatches) {
+    const digits = cardMatch.replace(/\D/g, '')
+    if (digits.length >= 13 && digits.length <= 19 && luhnValid(digits)) {
+      masked = masked.replace(cardMatch, '[CARD]')
+    }
+  }
+
+  masked = masked.replace(PASSPORT_REGEX, '[PASSPORT]')
+  return masked
 }
 
 function hash(input: string): string {
