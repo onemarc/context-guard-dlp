@@ -10,6 +10,8 @@ export class ShadowBadgeUI {
   private readonly tooltip: HTMLDivElement
   private readonly tooltipText: HTMLSpanElement
   private readonly allowOnceButton: HTMLButtonElement
+  private readonly mountObserver: MutationObserver
+  private readonly mountCheckTimer: number
   private anchor: HTMLElement | null = null
 
   constructor(options: BadgeOptions) {
@@ -27,10 +29,11 @@ export class ShadowBadgeUI {
         .badge {
           width: 16px;
           height: 16px;
+          position: relative;
           border-radius: 50%;
           border: 1px solid rgba(0, 0, 0, 0.24);
           cursor: default;
-          box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.36), 0 0 0 1px rgba(255, 255, 255, 0.2) inset;
           transition: transform 120ms ease;
           display: grid;
           place-items: center;
@@ -38,9 +41,17 @@ export class ShadowBadgeUI {
           margin: 0;
         }
         .badge::after {
-          content: '🛡';
-          font-size: 10px;
-          line-height: 1;
+          content: '';
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 10px;
+          height: 10px;
+          display: block;
+          transform: translate(-50%, -50%);
+          background: center / contain no-repeat
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M12 2l7 3v6c0 5.25-3.75 10-7 11-3.25-1-7-5.75-7-11V5l7-3z'/%3E%3C/svg%3E");
+          filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
         }
         .idle { background: #9ca3af; }
         .safe { background: #16a34a; }
@@ -118,17 +129,32 @@ export class ShadowBadgeUI {
       options.onAllowOnce()
     })
 
-    document.documentElement.appendChild(this.host)
+    this.mountHost()
+
+    this.mountObserver = new MutationObserver(() => {
+      this.mountHost()
+    })
+    this.mountObserver.observe(document, {
+      childList: true,
+      subtree: true,
+    })
+
+    this.mountCheckTimer = window.setInterval(() => {
+      this.mountHost()
+    }, 1200)
+
     window.addEventListener('scroll', this.reposition, true)
     window.addEventListener('resize', this.reposition, true)
   }
 
   public setAnchor(element: HTMLElement | null): void {
+    this.mountHost()
     this.anchor = element
     this.reposition()
   }
 
   public setState(state: RiskState, tooltipText: string): void {
+    this.mountHost()
     this.badge.classList.remove('idle', 'safe', 'checking', 'danger')
     this.tooltip.classList.remove('force-open')
 
@@ -152,6 +178,7 @@ export class ShadowBadgeUI {
   }
 
   public shake(tooltipText: string): void {
+    this.mountHost()
     this.tooltipText.textContent = tooltipText
     this.tooltip.classList.add('force-open')
     this.badge.classList.remove('shake')
@@ -159,7 +186,33 @@ export class ShadowBadgeUI {
     this.badge.classList.add('shake')
   }
 
+  public dispose(): void {
+    this.mountObserver.disconnect()
+    window.clearInterval(this.mountCheckTimer)
+    window.removeEventListener('scroll', this.reposition, true)
+    window.removeEventListener('resize', this.reposition, true)
+
+    if (this.host.isConnected) {
+      this.host.remove()
+    }
+  }
+
+  private mountHost(): void {
+    if (this.host.isConnected) {
+      return
+    }
+
+    const root = document.documentElement ?? document.body
+    if (!root) {
+      return
+    }
+
+    root.appendChild(this.host)
+  }
+
   private readonly reposition = (): void => {
+    this.mountHost()
+
     if (!this.anchor) {
       this.host.style.display = 'none'
       return
