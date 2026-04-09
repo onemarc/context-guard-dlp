@@ -10,7 +10,7 @@ const badge = new ShadowBadgeUI({
       return
     }
     decisionEngine.allowOnce(text)
-    badge.setState('SAFE', 'Bypass active for one send attempt')
+    badge.setState('SAFE', 'Allowed once for this message')
   },
 })
 
@@ -46,14 +46,15 @@ const decisionEngine = new DecisionEngine({
 const interceptor = new EventInterceptor({
   getState: () => decisionEngine.getState(),
   getCurrentText: () => getCurrentText(),
+  getActiveInput: () => activeInput,
   isBlocking: () => decisionEngine.isBlocking(),
   consumeAllowOnce: (text) => decisionEngine.consumeAllowOnce(text),
   onBlockedAttempt: (state) => {
     if (state === 'CHECKING') {
-      badge.shake('Sending blocked: Security check in progress')
+      badge.shake('Please wait. We are still checking this message.')
       return
     }
-    badge.shake('Sending blocked: Sensitive PII detected')
+    badge.shake('Message blocked to protect sensitive information.')
   },
 })
 
@@ -62,14 +63,14 @@ interceptor.attach()
 document.addEventListener(
   'focusin',
   (event) => {
-    const target = event.target
-    if (!(target instanceof HTMLElement) || !isWatchedInput(target)) {
+    const input = resolveWatchedInput(event.target)
+    if (!input) {
       return
     }
 
-    activeInput = target
-    badge.setAnchor(target)
-    decisionEngine.evaluate(getTextFromElement(target))
+    activeInput = input
+    badge.setAnchor(input)
+    decisionEngine.evaluate(getTextFromElement(input))
   },
   { capture: true },
 )
@@ -77,23 +78,77 @@ document.addEventListener(
 document.addEventListener(
   'input',
   (event) => {
-    const target = event.target
-    if (!(target instanceof HTMLElement) || !isWatchedInput(target)) {
+    const input = resolveWatchedInput(event.target)
+    if (!input) {
       return
     }
 
-    activeInput = target
-    badge.setAnchor(target)
-    decisionEngine.evaluate(getTextFromElement(target))
+    activeInput = input
+    badge.setAnchor(input)
+    decisionEngine.evaluate(getTextFromElement(input))
+  },
+  { capture: true },
+)
+
+document.addEventListener(
+  'beforeinput',
+  (event) => {
+    const input = resolveWatchedInput(event.target)
+    if (!input) {
+      return
+    }
+
+    activeInput = input
+    badge.setAnchor(input)
+    queueEvaluate(input)
+  },
+  { capture: true },
+)
+
+document.addEventListener(
+  'paste',
+  (event) => {
+    const input = resolveWatchedInput(event.target)
+    if (!input) {
+      return
+    }
+
+    activeInput = input
+    badge.setAnchor(input)
+    queueEvaluate(input)
+  },
+  { capture: true },
+)
+
+document.addEventListener(
+  'focusout',
+  () => {
+    window.setTimeout(() => {
+      const nextInput = resolveWatchedInput(document.activeElement)
+      if (nextInput) {
+        activeInput = nextInput
+        badge.setAnchor(nextInput)
+        return
+      }
+
+      clearActiveInputTracking()
+    }, 0)
   },
   { capture: true },
 )
 
 function getCurrentText(): string {
-  if (!activeInput) {
+  if (!activeInput || !document.contains(activeInput)) {
+    clearActiveInputTracking()
     return ''
   }
-  return getTextFromElement(activeInput)
+
+  const text = getTextFromElement(activeInput)
+  if (!text.trim()) {
+    decisionEngine.evaluate('')
+  }
+
+  return text
 }
 
 function getTextFromElement(element: HTMLElement): string {
@@ -101,7 +156,45 @@ function getTextFromElement(element: HTMLElement): string {
     return element.value
   }
 
-  return element.textContent ?? ''
+  return element.innerText || element.textContent || ''
+}
+
+function queueEvaluate(input: HTMLElement): void {
+  window.setTimeout(() => {
+    if (!document.contains(input)) {
+      return
+    }
+    decisionEngine.evaluate(getTextFromElement(input))
+  }, 0)
+}
+
+function clearActiveInputTracking(): void {
+  activeInput = null
+  badge.setAnchor(null)
+  decisionEngine.evaluate('')
+}
+
+function resolveWatchedInput(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof HTMLElement)) {
+    return document.activeElement instanceof HTMLElement && isWatchedInput(document.activeElement)
+      ? document.activeElement
+      : null
+  }
+
+  if (isWatchedInput(target)) {
+    return target
+  }
+
+  const editableRoot = target.closest('[contenteditable]:not([contenteditable="false"])')
+  if (editableRoot instanceof HTMLElement && isWatchedInput(editableRoot)) {
+    return editableRoot
+  }
+
+  if (document.activeElement instanceof HTMLElement && isWatchedInput(document.activeElement)) {
+    return document.activeElement
+  }
+
+  return null
 }
 
 function isWatchedInput(element: HTMLElement): boolean {
@@ -122,16 +215,16 @@ function updateUi(status: DecisionStatus): void {
 
 function tooltipByState(state: RiskState, reason: string): string {
   if (state === 'CHECKING') {
-    return 'Security check in progress'
+    return 'Checking this message for sensitive data...'
   }
 
   if (state === 'DANGER') {
-    return `Sensitive PII detected. ${reason}`
+    return `${reason}. Please remove it before sending.`
   }
 
   if (state === 'SAFE') {
-    return `Safe to send. ${reason}`
+    return 'Looks good. Safe to send.'
   }
 
-  return 'Monitoring input'
+  return 'Watching this field'
 }
