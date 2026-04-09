@@ -22,7 +22,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
         ok: true,
         state: 'DANGER',
         score: 95,
-        reason: 'Validation error. Blocking send by policy.',
+        reason: 'We could not verify this message safely, so sending is blocked.',
       } satisfies ValidationResponse)
     })
 
@@ -50,7 +50,7 @@ async function validate(request: ValidationRequest): Promise<ValidationResponse>
       ok: true,
       state: 'DANGER',
       score: 95,
-      reason: 'OpenAI API key missing in chrome.storage.local (openaiApiKey).',
+      reason: 'Cloud validation is unavailable, so sending is blocked for safety.',
     }
     await cacheResult(key, fallback)
     return fallback
@@ -58,7 +58,7 @@ async function validate(request: ValidationRequest): Promise<ValidationResponse>
 
   const model = new ChatOpenAI({
     apiKey,
-    model: 'gpt-4o-mini',
+    model: 'gpt-4.1-nano',
     temperature: 0,
   }).withStructuredOutput(verdictSchema)
 
@@ -66,7 +66,7 @@ async function validate(request: ValidationRequest): Promise<ValidationResponse>
     {
       role: 'system',
       content:
-        'You are a DLP validator. Input is sanitized/masked text. Classify as SAFE or DANGER for exfiltration prevention. Favor DANGER when uncertain.',
+        'You are a DLP validator. Input is privacy-scrubbed text where sensitive values may be replaced with placeholders such as [EMAIL], [PHONE], [CARD], [API_KEY], [TOKEN], [PASSPORT]. Classify as SAFE or DANGER for data exfiltration prevention. Favor DANGER when uncertain.',
     },
     {
       role: 'user',
