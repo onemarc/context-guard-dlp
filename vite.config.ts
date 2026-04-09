@@ -1,4 +1,3 @@
-import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
@@ -7,8 +6,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        content: resolve(__dirname, 'src/content/content-script.ts'),
-        background: resolve(__dirname, 'src/background/background.ts'),
+        content: new URL('./src/content/content-script.ts', import.meta.url).pathname,
+        background: new URL('./src/background/background.ts', import.meta.url).pathname,
       },
       output: {
         entryFileNames: 'assets/[name].js',
