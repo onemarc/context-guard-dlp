@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Context Guard DLP",
+  "version": "1.0.0",
+  "description": "Autonomous Decision Engine to prevent sensitive data exfiltration.",
+  "permissions": ["storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "assets/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["assets/content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_title": "Context Guard DLP"
+  }
+}
