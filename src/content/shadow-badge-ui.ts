@@ -12,6 +12,9 @@ export class ShadowBadgeUI {
   private readonly allowOnceButton: HTMLButtonElement
   private readonly mountObserver: MutationObserver
   private readonly mountCheckTimer: number
+  private readonly anchorResizeObserver: ResizeObserver
+  private trackingFrame: number | null = null
+  private lastAnchorSignature = ''
   private anchor: HTMLElement | null = null
 
   constructor(options: BadgeOptions) {
@@ -143,13 +146,33 @@ export class ShadowBadgeUI {
       this.mountHost()
     }, 1200)
 
+    this.anchorResizeObserver = new ResizeObserver(() => {
+      this.reposition()
+    })
+
     window.addEventListener('scroll', this.reposition, true)
     window.addEventListener('resize', this.reposition, true)
+    window.visualViewport?.addEventListener('resize', this.reposition)
+    window.visualViewport?.addEventListener('scroll', this.reposition)
   }
 
   public setAnchor(element: HTMLElement | null): void {
     this.mountHost()
+
+    if (this.anchor && this.anchor !== element) {
+      this.anchorResizeObserver.unobserve(this.anchor)
+    }
+
     this.anchor = element
+    this.lastAnchorSignature = ''
+
+    if (this.anchor) {
+      this.anchorResizeObserver.observe(this.anchor)
+      this.ensureTracking()
+    } else {
+      this.stopTracking()
+    }
+
     this.reposition()
   }
 
@@ -189,8 +212,12 @@ export class ShadowBadgeUI {
   public dispose(): void {
     this.mountObserver.disconnect()
     window.clearInterval(this.mountCheckTimer)
+    this.anchorResizeObserver.disconnect()
+    this.stopTracking()
     window.removeEventListener('scroll', this.reposition, true)
     window.removeEventListener('resize', this.reposition, true)
+    window.visualViewport?.removeEventListener('resize', this.reposition)
+    window.visualViewport?.removeEventListener('scroll', this.reposition)
 
     if (this.host.isConnected) {
       this.host.remove()
@@ -215,12 +242,56 @@ export class ShadowBadgeUI {
 
     if (!this.anchor) {
       this.host.style.display = 'none'
+      this.lastAnchorSignature = ''
+      return
+    }
+
+    if (!this.anchor.isConnected) {
+      this.host.style.display = 'none'
+      this.lastAnchorSignature = ''
       return
     }
 
     this.host.style.display = 'block'
     const rect = this.anchor.getBoundingClientRect()
-    this.host.style.top = `${Math.max(4, rect.top + 4)}px`
-    this.host.style.left = `${Math.min(window.innerWidth - 24, rect.right - 18)}px`
+    const top = Math.max(4, rect.top + 4)
+    const left = Math.min(window.innerWidth - 24, rect.right - 18)
+    const signature = `${top}|${left}|${rect.width}|${rect.height}|${window.innerWidth}|${window.innerHeight}`
+
+    if (signature === this.lastAnchorSignature) {
+      return
+    }
+
+    this.lastAnchorSignature = signature
+    this.host.style.top = `${top}px`
+    this.host.style.left = `${left}px`
+  }
+
+  private ensureTracking(): void {
+    if (this.trackingFrame !== null) {
+      return
+    }
+
+    const tick = () => {
+      this.reposition()
+
+      if (!this.anchor) {
+        this.trackingFrame = null
+        return
+      }
+
+      this.trackingFrame = window.requestAnimationFrame(tick)
+    }
+
+    this.trackingFrame = window.requestAnimationFrame(tick)
+  }
+
+  private stopTracking(): void {
+    if (this.trackingFrame === null) {
+      return
+    }
+
+    window.cancelAnimationFrame(this.trackingFrame)
+    this.trackingFrame = null
   }
 }
