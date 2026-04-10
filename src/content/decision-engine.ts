@@ -19,8 +19,16 @@ interface LocalScore {
 const SSN_REGEX = /\b\d{3}-\d{2}-\d{4}\b/
 const EMAIL_REGEX = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
 const TOKEN_REGEX = /\b[A-Za-z0-9_\-]{24,}\b/
-const API_KEY_REGEX = /(\bsk-[A-Za-z0-9]{8,}\b|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z\-_]{35}|\bghp_[A-Za-z0-9]{20,}\b|\bxox[baprs]-[A-Za-z0-9-]{10,}\b)/
-const SESSION_KV_REGEX = /\b(?:sessionid|session_id|token|auth(?:orization)?|api[_-]?key|secret)\s*[:=]\s*[A-Za-z0-9_\-]{6,}\b/i
+const API_KEY_REGEX =
+  /(\bsk-[A-Za-z0-9]{8,}\b|\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b|(?:AKIA|ASIA)[0-9A-Z]{16}|AIza[0-9A-Za-z\-_]{35}|\bghp_[A-Za-z0-9]{20,}\b|\bxox[baprs]-[A-Za-z0-9-]{10,}\b)/
+const HIGH_RISK_SECRET_KV_REGEX =
+  /(?:(?:"|')?(?:(?:db[_-]?)?password|passwd|pwd|private[_-]?key|private[_-]?token|client[_-]?secret|app[_-]?secret|aws[_-]?(?:secret|access)[_-]?key|stripe[_-]?token)(?:"|')?\s*[:=]\s*)(?:"[^"\n]{4,}"|'[^'\n]{4,}'|[^\s,}{]{4,})/i
+const HIGH_RISK_SECRET_KV_MASK_REGEX =
+  /((?:"|')?(?:(?:db[_-]?)?password|passwd|pwd|private[_-]?key|private[_-]?token|client[_-]?secret|app[_-]?secret|aws[_-]?(?:secret|access)[_-]?key|stripe[_-]?token)(?:"|')?\s*[:=]\s*)(?:"[^"\n]{4,}"|'[^'\n]{4,}'|[^\s,}{]{4,})/gi
+const SESSION_KV_REGEX =
+  /(?:(?:"|')?(?:sessionid|session_id|token|auth(?:orization)?|api[_-]?key|secret)(?:"|')?\s*[:=]\s*)(?:"[^"\n]{4,}"|'[^'\n]{4,}'|[A-Za-z0-9_\-]{6,})/i
+const SESSION_KV_MASK_REGEX =
+  /((?:"|')?(?:sessionid|session_id|token|auth(?:orization)?|api[_-]?key|secret)(?:"|')?\s*[:=]\s*)(?:"[^"\n]{4,}"|'[^'\n]{4,}'|[A-Za-z0-9_\-]{6,})/gi
 const PASSPORT_REGEX = /\b[A-Z]{1,2}\d{6,9}\b/
 const FULL_NAME_REGEX = /\b[A-Z][a-z]{1,30}\s+[A-Z][a-z]{1,30}\b/
 const PHONE_CANDIDATE_REGEX = /(?:\+?\d[\d().\-\s]{7,}\d)/g
@@ -200,9 +208,14 @@ function scoreLocal(text: string): LocalScore {
     reason = 'This looks like an API key or access secret'
   }
 
+  if (HIGH_RISK_SECRET_KV_REGEX.test(text)) {
+    score = Math.max(score, 96)
+    reason = 'This looks like a password or credential secret'
+  }
+
   if (SESSION_KV_REGEX.test(text)) {
-    score = Math.max(score, 68)
-    reason = 'This may contain a session token or secret value'
+    score = Math.max(score, 72)
+    reason = 'This may contain a token or secret key-value pair'
   }
 
   if (TOKEN_REGEX.test(text)) {
@@ -282,15 +295,9 @@ function maskText(text: string): string {
 
   masked = masked.replace(EMAIL_REGEX, '[EMAIL]')
   masked = masked.replace(SSN_REGEX, '[SSN]')
+  masked = masked.replace(HIGH_RISK_SECRET_KV_MASK_REGEX, '$1[REDACTED]')
+  masked = masked.replace(SESSION_KV_MASK_REGEX, '$1[REDACTED]')
   masked = masked.replace(API_KEY_REGEX, '[API_KEY]')
-  masked = masked.replace(SESSION_KV_REGEX, (match) => {
-    const divider = match.includes('=') ? '=' : ':'
-    const parts = match.split(divider)
-    if (parts.length < 2) {
-      return '[SECRET]'
-    }
-    return `${parts[0].trim()}${divider}[REDACTED]`
-  })
 
   masked = masked.replace(TOKEN_REGEX, '[TOKEN]')
 
