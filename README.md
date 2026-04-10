@@ -4,9 +4,11 @@
 
 Context Guard DLP is a browser extension that helps prevent accidental sharing of sensitive data in web-based chat and messaging inputs.
 
+https://github.com/user-attachments/assets/5cf4ea3d-b995-45cf-b1bf-55c9ff32a9d9
+
 It monitors text fields in real time, evaluates risk locally with pattern-based detection, and uses an OpenAI fallback check for ambiguous cases. If risky content is detected, send actions are blocked until the content is removed or the user explicitly allows one send.
 
-The project is built with TypeScript and Vite using Chrome Extension Manifest V3.
+The project is built using TypeScript and LangChain.js as a Chrome extension.
 
 ## Functionality
 
