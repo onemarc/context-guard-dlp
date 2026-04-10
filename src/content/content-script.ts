@@ -100,7 +100,8 @@ document.addEventListener(
 
     activeInput = input
     badge.setAnchor(input)
-    queueEvaluate(input)
+    const inputEvent = event as InputEvent
+    queueEvaluate(input, { aggressive: inputEvent.inputType === 'insertFromPaste' })
   },
   { capture: true },
 )
@@ -115,7 +116,18 @@ document.addEventListener(
 
     activeInput = input
     badge.setAnchor(input)
-    queueEvaluate(input)
+
+    if (event instanceof ClipboardEvent) {
+      const pastedText = event.clipboardData?.getData('text/plain').trim() ?? ''
+      if (pastedText) {
+        const projected = projectTextAfterPaste(input, pastedText)
+        if (projected) {
+          decisionEngine.evaluate(projected)
+        }
+      }
+    }
+
+    queueEvaluate(input, { aggressive: true })
   },
   { capture: true },
 )
@@ -159,13 +171,50 @@ function getTextFromElement(element: HTMLElement): string {
   return element.innerText || element.textContent || ''
 }
 
-function queueEvaluate(input: HTMLElement): void {
+function queueEvaluate(input: HTMLElement, options?: { aggressive?: boolean }): void {
   window.setTimeout(() => {
-    if (!document.contains(input)) {
-      return
-    }
-    decisionEngine.evaluate(getTextFromElement(input))
+    evaluateIfConnected(input)
   }, 0)
+
+  if (!options?.aggressive) {
+    return
+  }
+
+  window.requestAnimationFrame(() => {
+    evaluateIfConnected(input)
+  })
+
+  window.setTimeout(() => {
+    evaluateIfConnected(input)
+  }, 90)
+
+  window.setTimeout(() => {
+    evaluateIfConnected(input)
+  }, 240)
+}
+
+function evaluateIfConnected(input: HTMLElement): void {
+  if (!document.contains(input)) {
+    return
+  }
+
+  decisionEngine.evaluate(getTextFromElement(input))
+}
+
+function projectTextAfterPaste(input: HTMLElement, pastedText: string): string {
+  if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
+    const existing = input.value
+    const start = input.selectionStart ?? existing.length
+    const end = input.selectionEnd ?? start
+    return `${existing.slice(0, start)}${pastedText}${existing.slice(end)}`
+  }
+
+  const existing = getTextFromElement(input)
+  if (!existing.trim()) {
+    return pastedText
+  }
+
+  return `${existing}\n${pastedText}`
 }
 
 function clearActiveInputTracking(): void {
