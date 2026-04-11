@@ -45,7 +45,7 @@ Build output is generated in the dist folder.
 
 ### 3. Load extension in Chrome
 
-1. Open Chrome and go to chrome://extensions.
+1. Open Chrome and go to `chrome://extensions`.
 2. Enable Developer mode.
 3. Click Load unpacked.
 4. Select the dist folder.
