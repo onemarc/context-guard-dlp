@@ -21,7 +21,7 @@ The project is built using TypeScript and LangChain.js as a Chrome extension.
 	- Phone numbers and passport/ID-like formats.
 	- API keys and session/token-like secrets.
 	- Quasi-identifier combinations that can reveal identity.
-- Uses OpenAI model validation (gpt-4.1-nano) for ambiguous cases.
+- Uses OpenAI model validation `(gpt-4.1-nano)` for ambiguous cases.
 - Caches validation responses for repeated masked input.
 - Displays a floating badge UI near the active input with status and user-friendly messaging.
 - Supports one-time override (Allow Once) for the current message.
