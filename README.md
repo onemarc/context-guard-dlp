@@ -14,7 +14,7 @@ The project is built using TypeScript and LangChain.js as a Chrome extension.
 
 - Detects sensitive content while typing and pasting in editable chat inputs.
 - Intercepts send attempts on Enter, send button clicks, and form submits.
-- Classifies message risk as IDLE, SAFE, CHECKING, or DANGER.
+- Classifies message risk as `IDLE`, `SAFE`, `CHECKING`, or `DANGER`.
 - Uses local detection for common sensitive patterns, including:
 	- Payment card-like values.
 	- Social security number format.
@@ -55,7 +55,7 @@ Build output is generated in the dist folder.
 This step is optional. The extension works without an OpenAI key using local detection.
 If you add a key, ambiguous cases are validated more precisely.
 
-The background validator reads key openaiApiKey from chrome.storage.local.
+The background validator reads key `openaiApiKey from chrome.storage.local`.
 
 After loading the extension (step 3), open the extension service worker console and run:
 
